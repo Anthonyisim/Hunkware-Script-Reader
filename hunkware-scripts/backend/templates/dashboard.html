@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block title %}Script Reader{% endblock %}
+{% block content %}
+
+<div class="card job-header" id="jobHeaderCard">
+  <div>
+    <div class="job-id">ID: <span id="hdr-jobid">—</span></div>
+    <div class="job-type" id="hdr-servicetype">No job loaded</div>
+    <div class="job-sub">
+      <span>Job</span>
+      <span class="scheduled" id="hdr-status">—</span>
+    </div>
+  </div>
+  <div>
+    <div class="client-name" id="hdr-clientname">—</div>
+    <div class="detail-row"><span class="ic">☎</span><span id="hdr-phone">—</span></div>
+    <div class="detail-row"><span class="ic">✉</span><span id="hdr-email">—</span></div>
+  </div>
+  <div>
+    <div class="detail-row"><span class="ic">📅</span><span id="hdr-date">—</span></div>
+    <div class="detail-row"><span class="ic">🕐</span><span id="hdr-window">—</span></div>
+  </div>
+  <div>
+    <div class="detail-row"><span class="ic">👤</span><span id="hdr-hunks"># of HUNKS: —</span></div>
+    <div class="detail-row"><span class="ic">💲</span><span id="hdr-amount">Est: —</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">1 · Load a Work Order</div>
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept="application/pdf">
+    <div class="dropzone-title">Drop a work order PDF here, or click to browse</div>
+    <div class="muted">Fields will be auto-extracted for review below. Nothing is saved to disk.</div>
+  </div>
+  <div id="uploadStatus" class="muted" style="margin-top:10px;"></div>
+</div>
+
+<div class="card">
+  <div class="section-title">2 · Review &amp; Edit Job Details</div>
+  <form id="fieldsForm">
+    <div class="field-grid">
+      <div class="field" data-field="client_name">
+        <label>Client Name</label>
+        <input type="text" name="client_name" placeholder="e.g. Heather Stevenson">
+      </div>
+      <div class="field" data-field="service_type">
+        <label>Service Type</label>
+        <input type="text" name="service_type" placeholder="e.g. Moving / Junk Removal / Move Labor">
+      </div>
+      <div class="field" data-field="service_date">
+        <label>Service Date</label>
+        <input type="text" name="service_date" placeholder="e.g. Jun 29, 2026">
+      </div>
+      <div class="field" data-field="arrival_window">
+        <label>Arrival Window</label>
+        <input type="text" name="arrival_window" placeholder="e.g. 9:00 AM - 2:45 PM">
+      </div>
+      <div class="field" data-field="origin_address">
+        <label>Origin Address</label>
+        <input type="text" name="origin_address" placeholder="e.g. 1331 Macarthur Blvd, Munster, IN">
+      </div>
+      <div class="field" data-field="destination_address">
+        <label>Destination Address</label>
+        <input type="text" name="destination_address" placeholder="e.g. 8348 Castle Dr, Munster, IN">
+      </div>
+      <div class="field" data-field="num_hunks">
+        <label># of HUNKS</label>
+        <input type="text" name="num_hunks" placeholder="e.g. 4">
+      </div>
+      <div class="field" data-field="estimated_hours">
+        <label>Estimated Hours</label>
+        <input type="text" name="estimated_hours" placeholder="e.g. 5.75">
+      </div>
+      <div class="field" data-field="amount">
+        <label>$ Amount</label>
+        <input type="text" name="amount" placeholder="e.g. 1,864.75">
+      </div>
+      <div class="field" data-field="caller_name">
+        <label>Caller / VA Name</label>
+        <input type="text" name="caller_name" placeholder="Your name for the script" value="{{ user.name }}">
+      </div>
+    </div>
+    <div class="field-grid wide">
+      <div class="field" data-field="items">
+        <label>List of Items (one per line, or comma-separated)</label>
+        <textarea name="items" placeholder="e.g. Dresser (4x), Dining Table (1x), King/Qn Beds (4x)"></textarea>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="section-title">3 · Choose a Script</div>
+  <div class="script-types">
+    {% for key, label in script_types.items() %}
+    <div class="script-type-btn" data-script="{{ key }}">{{ label }}</div>
+    {% endfor %}
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="generateBtn" disabled>
+      <span id="generateBtnText">Generate Script</span>
+    </button>
+    <button class="btn btn-secondary" id="resetBtn" type="button">Clear All</button>
+  </div>
+</div>
+
+<div class="card hidden" id="outputCard">
+  <div class="output-toolbar">
+    <div class="output-label" id="outputLabel">Script</div>
+    <button class="copy-btn" id="copyBtn">Copy to Clipboard</button>
+  </div>
+  <div class="script-output" id="scriptOutput"></div>
+</div>
+
+<script>
+const fieldKeys = ["client_name","service_type","service_date","arrival_window",
+  "origin_address","destination_address","num_hunks","estimated_hours","amount","items"];
+
+let selectedScript = null;
+
+function setField(name, value) {
+  const el = document.querySelector(`[name="${name}"]`);
+  if (!el) return;
+  if (Array.isArray(value)) {
+    el.value = value.join("\n");
+  } else {
+    el.value = value || "";
+  }
+}
+
+function getFields() {
+  const fields = {};
+  fieldKeys.forEach(k => {
+    const el = document.querySelector(`[name="${k}"]`);
+    fields[k] = el ? el.value : "";
+  });
+  return fields;
+}
+
+function markMissing(missingList) {
+  document.querySelectorAll(".field[data-field]").forEach(f => f.classList.remove("missing"));
+  (missingList || []).forEach(key => {
+    const wrap = document.querySelector(`.field[data-field="${key}"]`);
+    if (wrap) wrap.classList.add("missing");
+  });
+}
+
+function updateHeader(fields) {
+  document.getElementById("hdr-jobid").textContent = fields.job_id || "—";
+  document.getElementById("hdr-servicetype").textContent = (fields.service_type || "JOB").toUpperCase();
+  document.getElementById("hdr-status").textContent = fields.status || "—";
+  document.getElementById("hdr-clientname").textContent = (fields.client_name || "—").toUpperCase();
+  document.getElementById("hdr-phone").textContent = fields.phone || "—";
+  document.getElementById("hdr-email").textContent = fields.email || "—";
+  document.getElementById("hdr-date").textContent = fields.service_date || "—";
+  document.getElementById("hdr-window").textContent = fields.arrival_window || "—";
+  document.getElementById("hdr-hunks").textContent = "# of HUNKS: " + (fields.num_hunks || "—");
+  document.getElementById("hdr-amount").textContent = "Est: $" + (fields.amount || "—");
+}
+
+// --- Upload handling ---
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const uploadStatus = document.getElementById("uploadStatus");
+
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("dragover"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+dropzone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropzone.classList.remove("dragover");
+  if (e.dataTransfer.files.length) {
+    fileInput.files = e.dataTransfer.files;
+    handleUpload(e.dataTransfer.files[0]);
+  }
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) handleUpload(fileInput.files[0]);
+});
+
+async function handleUpload(file) {
+  if (file.type !== "application/pdf") {
+    uploadStatus.textContent = "Please upload a PDF file.";
+    uploadStatus.style.color = "var(--red)";
+    return;
+  }
+  uploadStatus.textContent = "Reading " + file.name + "…";
+  uploadStatus.style.color = "var(--grey-text)";
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch("/api/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok) {
+      uploadStatus.textContent = data.error || "Could not parse this PDF.";
+      uploadStatus.style.color = "var(--red)";
+      return;
+    }
+    fieldKeys.forEach(k => setField(k, data.fields[k]));
+    window._lastFields = data.fields;
+    updateHeader(data.fields);
+    markMissing(data.missing_fields);
+    uploadStatus.textContent = "Loaded from " + data.source_filename + ". Review the fields below before generating a script.";
+    uploadStatus.style.color = "var(--green)";
+    evaluateGenerateButton();
+  } catch (err) {
+    uploadStatus.textContent = "Upload failed. Please try again.";
+    uploadStatus.style.color = "var(--red)";
+  }
+}
+
+// --- Script type selection ---
+document.querySelectorAll(".script-type-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".script-type-btn").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedScript = btn.dataset.script;
+    evaluateGenerateButton();
+  });
+});
+
+function evaluateGenerateButton() {
+  document.getElementById("generateBtn").disabled = !selectedScript;
+}
+
+// --- Generate ---
+document.getElementById("generateBtn").addEventListener("click", async () => {
+  const fields = getFields();
+  const callerName = document.querySelector('[name="caller_name"]').value;
+  const btn = document.getElementById("generateBtn");
+  const btnText = document.getElementById("generateBtnText");
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ script_type: selectedScript, fields, caller_name: callerName })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || "Could not generate script.");
+      return;
+    }
+    document.getElementById("outputLabel").textContent = data.script_label;
+    document.getElementById("scriptOutput").textContent = data.script_text;
+    document.getElementById("outputCard").classList.remove("hidden");
+    document.getElementById("outputCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    alert("Something went wrong generating the script.");
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = "Generate Script";
+  }
+});
+
+document.getElementById("copyBtn").addEventListener("click", () => {
+  const text = document.getElementById("scriptOutput").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById("copyBtn");
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = "Copy to Clipboard"; btn.classList.remove("copied"); }, 1800);
+  });
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  document.getElementById("fieldsForm").reset();
+  document.querySelectorAll(".script-type-btn").forEach(b => b.classList.remove("selected"));
+  selectedScript = null;
+  evaluateGenerateButton();
+  document.getElementById("outputCard").classList.add("hidden");
+  uploadStatus.textContent = "";
+  updateHeader({});
+  markMissing([]);
+});
+</script>
+
+{% endblock %}

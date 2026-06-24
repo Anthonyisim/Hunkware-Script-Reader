@@ -1,0 +1,18 @@
+services:
+  script-reader:
+    build: ./backend
+    container_name: hunkware-script-reader
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DATABASE_URL=sqlite:////app/instance/app.db
+    volumes:
+      - script-reader-data:/app/instance
+    restart: unless-stopped
+
+volumes:
+  script-reader-data:

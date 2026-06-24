@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Sign In{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-brand">HUNK<span class="brand-accent">WARE</span></div>
+    <div class="auth-sub">Script Reader — Team Sign In</div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('auth.login') }}" autocomplete="off">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" name="email" required autofocus>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" name="password" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Sign In</button>
+    </form>
+    <div class="auth-foot">Need access? <a href="{{ url_for('auth.register') }}">Use an invite code</a></div>
+  </div>
+</div>
+{% endblock %}
